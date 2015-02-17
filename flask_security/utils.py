@@ -306,7 +306,7 @@ def get_within_delta(key, app=None):
 
 
 def send_mail(subject, recipient, template, **context):
-    """Send an email via the Flask-Mail extension.
+    """Send an email via Sendgrid extension.
 
     :param subject: Email subject
     :param recipient: Email recipient
@@ -314,23 +314,47 @@ def send_mail(subject, recipient, template, **context):
     :param context: The context to render the template with
     """
 
+    import sendgrid
+    from sendgrid import SendGridError, SendGridClientError, SendGridServerError
+
     context.setdefault('security', _security)
     context.update(_security._run_ctx_processor('mail'))
 
-    msg = Message(subject,
-                  sender=_security.email_sender,
-                  recipients=[recipient])
+    sg = sendgrid.SendGridClient('listicles', 'wdC50^F{[x]N', raise_errors=True)
+
+    message = sendgrid.Mail()
+    message.set_subject(subject)
+    message.set_from('Udo Listicle <heart@listicles.com>')
+
+    message.add_to('<' + recipient + '>')
 
     ctx = ('security/email', template)
-    msg.body = render_template('%s/%s.txt' % ctx, **context)
-    msg.html = render_template('%s/%s.html' % ctx, **context)
+
+    email_body = render_template('%s/%s.txt' % ctx, **context)
+    message.set_text(email_body)
+
+    html_email_body = render_template('%s/%s.html' % ctx, **context)
+    message.set_html(html_email_body)
 
     if _security._send_mail_task:
-        _security._send_mail_task(msg)
+        _security._send_mail_task(message)
+
         return
 
-    mail = current_app.extensions.get('mail')
-    mail.send(msg)
+    # By default, .send method returns a tuple (http_status_code, message), 
+    # however you can pass raise_errors=True to SendGridClient constructor, 
+    # then .send method will raise SendGridClientError for 4xx errors, and 
+    # SendGridServerError for 5xx errors.
+    try:
+        status, msg = sg.send(message)
+
+        emailStatus = True
+    except SendGridClientError:
+        emailStatus = False
+    except SendGridServerError:
+        emailStatus = False
+
+    return emailStatus
 
 
 def get_token_status(token, serializer, max_age=None):
