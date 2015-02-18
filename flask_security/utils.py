@@ -38,6 +38,8 @@ _datastore = LocalProxy(lambda: _security.datastore)
 
 _pwd_context = LocalProxy(lambda: _security.pwd_context)
 
+_sendgrid = LocalProxy(lambda: current_app.extensions['sendgrid'])
+
 PY3 = sys.version_info[0] == 3
 
 if PY3:  # pragma: no cover
@@ -313,18 +315,15 @@ def send_mail(subject, recipient, template, **context):
     :param template: The name of the email template
     :param context: The context to render the template with
     """
-
     import sendgrid
     from sendgrid import SendGridError, SendGridClientError, SendGridServerError
 
     context.setdefault('security', _security)
     context.update(_security._run_ctx_processor('mail'))
 
-    sg = sendgrid.SendGridClient('listicles', 'wdC50^F{[x]N', raise_errors=True)
-
     message = sendgrid.Mail()
     message.set_subject(subject)
-    message.set_from('Udo Listicle <heart@listicles.com>')
+    message.set_from(app.config["SENDGRID_EMAIL_FROM"])
 
     message.add_to('<' + recipient + '>')
 
@@ -346,12 +345,12 @@ def send_mail(subject, recipient, template, **context):
     # then .send method will raise SendGridClientError for 4xx errors, and 
     # SendGridServerError for 5xx errors.
     try:
-        status, msg = sg.send(message)
+        status, msg = app.config["SENDGRID_CLIENT"].send(message)
 
         emailStatus = True
-    except SendGridClientError:
+    except sendgrid.SendGridClientError:
         emailStatus = False
-    except SendGridServerError:
+    except sendgrid.SendGridServerError:
         emailStatus = False
 
     return emailStatus
